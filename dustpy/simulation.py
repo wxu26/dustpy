@@ -17,6 +17,10 @@ from dustpy.utils.boundary import Boundary
 import numpy as np
 from types import SimpleNamespace
 
+# WX: use this for default initialization functions
+def do_nothing(sim):
+    return
+
 
 class Simulation(Frame):
     """The main simulation class for running dust coagulation simulations.
@@ -374,7 +378,10 @@ class Simulation(Frame):
             msg = colorize(msg)
             print(msg)
 
-    def initialize(self):
+    def initialize(self,
+        customized_gas_init=do_nothing, # WX: gas initialization function
+        customized_sim_init=do_nothing, # WX: modify other sim options
+        ):
         '''Function initializes the simulation frame.
 
         Function sets all fields that are None with a standard value.
@@ -396,6 +403,7 @@ class Simulation(Frame):
         self._initializegrid()
 
         # GAS QUANTITIES
+        customized_gas_init(self) # WX: run customized gas initialization first
         self._initializegas()
 
         # DUST QUANTITIES
@@ -426,6 +434,9 @@ class Simulation(Frame):
         # WRITER
         if self.writer is None:
             self.writer = hdf5writer()
+
+        # WX: other customization before the final update
+        customized_sim_init(self)
 
         # Updating the entire Simulation object including integrator finalization
         self.integrator._finalize()
