@@ -607,10 +607,20 @@ class Simulation(Frame):
                 shape2), description="Radial velocity [cm/s]")
             self.dust.v.rad.updater = std.dust.vrad
         # Initialize dust quantities partly to calculate Sigma
-        try:
-            self.dust.update()
-        except:
-            pass
+        # WX: this sometimes causes runtime error
+        #try:
+        #    self.dust.update()
+        #except:
+        #    pass
+
+        # WX: change the try-except to explicit partial update
+        self.dust.delta.update()
+        self.dust.rhos.update()
+        self.dust.fill.update()
+        self.dust.a.update()
+        self.dust.St.update()
+        self.dust.H.update()
+
         # Floor value
         if self.dust.SigmaFloor is None:
             SigmaFloor = 0.1*std.dust.SigmaFloor(self)
