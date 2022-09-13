@@ -44,7 +44,7 @@ class Simulation(Frame):
         # Namespace with parameters to set the initial conditions
         self._ini = SimpleNamespace(**{"dust": SimpleNamespace(**{"aIniMax": 0.0001,
                                                                   "allowDriftingParticles": False,
-                                                                  "erosionMassRatio": 10.,
+                                                                  "erosionMassRatio": 10.01, # WX: avoid exactly 10
                                                                   "d2gRatio": 1.e-2,
                                                                   "distExp": -3.5,
                                                                   "excavatedMass": 1.,
