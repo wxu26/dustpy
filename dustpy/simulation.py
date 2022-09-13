@@ -118,8 +118,9 @@ class Simulation(Frame):
         self.dust.rhos = None
         self.dust.p = Group(self, description="Probabilities")
         self.dust.p.frag = None
+        self.dust.p.frag0 = None
         self.dust.p.stick = None
-        self.dust.p.updater = ["frag", "stick"]
+        self.dust.p.updater = ["frag", "frag0", "stick"]
         self.dust.S = Group(self, description="Sources")
         self.dust.S.coag = None
         self.dust.S.ext = None
@@ -544,6 +545,10 @@ class Simulation(Frame):
             self.dust.p.frag = Field(self, np.zeros(
                 shape3), description="Fragmentation probability")
             self.dust.p.frag.updater = std.dust.p_frag
+        if self.dust.p.frag0 is None:
+            self.dust.p.frag0 = Field(self, np.zeros(
+                shape3), description="Fragmentation probability")
+            self.dust.p.frag0.updater = None # just keep this at zero by default
         if self.dust.p.stick is None:
             self.dust.p.stick = Field(self, np.zeros(
                 shape3), description="Sticking probability")
