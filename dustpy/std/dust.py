@@ -278,6 +278,23 @@ def H(sim):
         Dust scale heights"""
     return dust_f.h_dubrulle1995(sim.gas.Hp, sim.dust.St, sim.dust.delta.vert)
 
+def get_A0_and_eps0(sim, A, eps):
+    """
+    WX: new function
+        In: simulation + A and eps for f_excav=1
+        Out: A and eps for f_excav=0
+    Note: we assume grids are sufficiently large so erosion happens within one mass grid and
+    all coagulation parameters except A and eps are the same.
+    """
+    eps0 = np.zeros_like(eps)
+    m = np.array(sim.grid.m.tolist())
+    m1, m2 = np.meshgrid(m, m)
+    dm = np.maximum(m1/m2, m2/m1)
+    mask = (dm>sim.ini.dust.erosionMassRatio)
+    A0 = A.copy()
+    A0[mask] = A[mask]/2
+    return A0, eps0
+
 
 def jacobian(sim, x, dx=None, *args, **kwargs):
     """Function calculates the Jacobian for implicit dust integration.
@@ -314,6 +331,7 @@ def jacobian(sim, x, dx=None, *args, **kwargs):
     m = sim.grid.m
     phi = sim.dust.coagulation.phi
     Rf = sim.dust.kernel * sim.dust.p.frag
+    Rf0 = sim.dust.kernel * sim.dust.p.frag0
     Rs = sim.dust.kernel * sim.dust.p.stick
     SigD = sim.dust.Sigma
     SigDfloor = sim.dust.SigmaFloor
@@ -334,8 +352,12 @@ def jacobian(sim, x, dx=None, *args, **kwargs):
     # Total problem size
     Ntot = int((Nr*Nm))
     # Getting data vector and coordinates in sparse matrix
-    dat, row, col = dust_f.jacobian_coagulation_generator(
+    dat1, row, col = dust_f.jacobian_coagulation_generator(
         A, cstick, eps, ilf, irm, istick, m, phi, Rf, Rs, SigD, SigDfloor)
+    A0, eps0 = get_A0_and_eps0(sim, A, eps)
+    dat0, row, col = dust_f.jacobian_coagulation_generator(
+        A0, cstick, eps0, ilf, irm, istick, m, phi, Rf0, Rs*0., SigD, SigDfloor)
+    dat = dat1 + dat0
     gen = (dat, (row, col))
     # Building sparse matrix of coagulation Jacobian
     J_coag = sp.csc_matrix(
@@ -613,7 +635,7 @@ def S_coag(sim, Sigma=None):
         Coagulation source terms"""
     if Sigma is None:
         Sigma = sim.dust.Sigma
-    return dust_f.s_coag(sim.dust.coagulation.stick,
+    S1 = dust_f.s_coag(sim.dust.coagulation.stick,
                          sim.dust.coagulation.stick_ind,
                          sim.dust.coagulation.A,
                          sim.dust.coagulation.eps,
@@ -625,6 +647,21 @@ def S_coag(sim, Sigma=None):
                          sim.grid.m,
                          Sigma,
                          sim.dust.SigmaFloor)
+    A0, eps0 = get_A0_and_eps0(sim, sim.dust.coagulation.A, sim.dust.coagulation.eps)
+    S0 = dust_f.s_coag(sim.dust.coagulation.stick,
+                         sim.dust.coagulation.stick_ind,
+                         A0,
+                         eps0,
+                         sim.dust.coagulation.lf_ind,
+                         sim.dust.coagulation.rm_ind,
+                         sim.dust.coagulation.phi,
+                         sim.dust.kernel * sim.dust.p.frag0,
+                         sim.dust.kernel * 0.,
+                         sim.grid.m,
+                         Sigma,
+                         sim.dust.SigmaFloor)
+    S = S1+S0
+    return S
 
 
 def S_hyd(sim, Sigma=None):
