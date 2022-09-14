@@ -494,6 +494,11 @@ def jacobian(sim, x, dx=None, *args, **kwargs):
         shape=(Ntot, Ntot)
     )
 
+    # WX: store pieces of the jacobian
+    # this is bad, but just a temporary fix
+    sim.jac_coag = J_coag
+    sim.jac_others = J_in + J_hyd + J_out
+
     # Adding and returning all matrix components
     return J_in + J_coag + J_hyd + J_out
 
@@ -999,3 +1004,82 @@ class impl_1_direct(Scheme):
 
     def __init__(self):
         super().__init__(_f_impl_1_direct, description="Implicit 1st-order direct solver")
+
+
+"""
+WX: new scheme with jacobian splitted into coagulation and radial evolution for better performance
+"""
+def _f_impl_1_direct_split(x0, Y0, dx, jac=None, rhs=None, *args, **kwargs):
+    """Implicit 1st-order integration scheme with direct matrix inversion
+
+    Parameters
+    ----------
+    x0 : Intvar
+        Integration variable at beginning of scheme
+    Y0 : Field
+        Variable to be integrated at the beginning of scheme
+    dx : IntVar
+        Stepsize of integration variable
+    jac : Field, optional, defaul : None
+        Current Jacobian. Will be calculated, if not set
+    args : additional positional arguments
+    kwargs : additional keyworda arguments
+
+    Returns
+    -------
+    dY : Field
+        Delta of variable to be integrated
+
+    Butcher tableau
+    ---------------
+     1 | 1
+    ---|---
+       | 1
+    """
+    if jac is None:
+        jac = Y0.jacobian(x0, dx)
+    if rhs is None:
+        rhs = np.array(Y0.ravel())
+
+    Nm = Y0._owner.dust.Sigma.shape[1]
+
+    # Add external source terms to right-hand side
+    rhs[Nm:-Nm] += dx*Y0._owner.dust.S.ext[1:-1, ...].ravel()
+
+    N = jac.shape[0]
+    eye = sp.identity(N, format="csc")
+
+    # this is bad, but just a temporary fix
+    jac_coag = Y0._owner.jac_coag
+    jac_others = Y0._owner.jac_others
+
+    # leapfrog: radial evolution - coagulation - radial evolution
+
+    # step 1. radial evolution
+    A = eye - .5*dx[0] * jac_others
+    A_LU = sp.linalg.splu(A,
+                          permc_spec="MMD_AT_PLUS_A")
+    rhs = A_LU.solve(rhs)
+
+    # step 2. coagulation
+    A = eye - dx[0] * jac_coag
+    A_LU = sp.linalg.splu(A,
+                          permc_spec="MMD_AT_PLUS_A")
+    rhs = A_LU.solve(rhs)
+
+    # step 3. radial evolution
+    A = eye - .5*dx[0] * jac_others
+    A_LU = sp.linalg.splu(A,
+                          permc_spec="MMD_AT_PLUS_A")
+    Y1_ravel = A_LU.solve(rhs)
+
+    Y1 = Y1_ravel.reshape(Y0.shape)
+
+    return Y1 - Y0
+
+
+class impl_1_direct_split(Scheme):
+    """Modified class for implicit dust integration."""
+
+    def __init__(self):
+        super().__init__(_f_impl_1_direct_split, description="Implicit 1st-order direct solver, with operator splitting")
